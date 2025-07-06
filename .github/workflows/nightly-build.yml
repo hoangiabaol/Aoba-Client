@@ -1,0 +1,51 @@
+name: Java CI with Gradle
+
+on:
+  schedule:
+    - cron: "0 22 * * 5"
+
+concurrency:
+  group: "latest"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      repository-projects: write
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - name: Get new commits
+        run: echo "NEW_COMMIT_COUNT=$(git log --oneline --since '1 week ago' | wc -l)" >> $GITHUB_ENV
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4.7.1
+        with:
+          java-version: '21'
+          distribution: 'zulu'
+          java-package: 'jdk'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Fetch Build Time
+        run: echo "time=$(date +%Y-%m-%d)" >> $env:GITHUB_ENV
+
+      - name: Build
+        run: ./gradlew build
+
+      - name: Remove *-sources.jar
+        run: rm ./build/libs/*-sources.jar || true
+
+      - uses: "rearrangement/auto-releases@v1.1"
+        if: ${{ env.NEW_COMMIT_COUNT > 0 }}
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: weekly-${{env.time}}
+          prerelease: true
+          title: Weekly Build ${{env.time}}
+          files: |
+            ./build/libs/*.jar
